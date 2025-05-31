@@ -1,0 +1,98 @@
+version: '3.8'
+
+# Define networks
+networks:
+  two_apps:
+    external: true
+
+# Define shared volumes
+volumes:
+  app_logs:
+  app_data:
+
+# Define secrets (for sensitive data)
+secrets:
+  api_key:
+    file: ./secrets/api_key.txt
+
+services:
+  first-service:
+    build: 
+      context: ./first
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=development
+    image: first-service:v1
+    container_name: first-app  # Custom container name
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=http://second-service:9080/first
+      - NODE_ENV=development
+    env_file: ./first/.env  # Load environment variables from file
+    networks:
+      - two_apps
+    depends_on:
+      second-service:
+        condition: service_healthy  # Wait for second-service to be healthy
+    volumes:
+      - ./first:/app/src  # Mount for development (hot reload)
+      - app_logs:/app/logs
+    healthcheck:  # Define how to check if service is healthy
+      test: ["CMD", "wget", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:  # Deployment configuration
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  second-service:
+    build: ./second
+    image: second-service:v1
+    container_name: second-app
+    ports:
+      - "9080:9080"
+    networks:
+      - two_apps
+    volumes:
+      - ./second:/app/src
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    secrets:
+      - api_key
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+    restart: always
+
+# Add monitoring service (example)
+  monitoring:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - two_apps
