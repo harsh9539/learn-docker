@@ -7,7 +7,7 @@
 # EXPOSE 8080
 # CMD ["node", "index.js"]
 # -------- STAGE 1: Build Dependencies --------
-FROM node:18 as builder
+FROM node:18 AS builder
 
 # Install curl for healthchecks
 # RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
